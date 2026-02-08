@@ -15,6 +15,20 @@ const ALLOWED_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const repoRoot = process.cwd();
 const requestsDir = path.join(repoRoot, ".codex-eyes");
 const requestsFile = path.join(requestsDir, "requests.jsonl");
+const LOG_PREFIX = "[codex-eyes-mcp]";
+
+function logEvent(event, details) {
+  const timestamp = new Date().toISOString();
+  let detailsPart = "";
+  if (typeof details !== "undefined") {
+    try {
+      detailsPart = ` ${JSON.stringify(details)}`;
+    } catch {
+      detailsPart = " [unserializable-details]";
+    }
+  }
+  process.stderr.write(`${LOG_PREFIX} ${timestamp} ${event}${detailsPart}\n`);
+}
 
 function toSafeRepoRelativePath(requestPath) {
   if (typeof requestPath !== "string" || requestPath.trim() === "") {
@@ -55,18 +69,20 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+  logEvent("list_tools");
   return {
     tools: [
       {
         name: "request_image",
         description:
-          "Queue a local repository image path to be attached on wrapper restart.",
+          "For agent use: call this when you need to inspect a local image. It queues the path for codex-eyes, which restarts Codex with 'resume --last -i <path>' so the image is added to context.",
         inputSchema: {
           type: "object",
           properties: {
             path: {
               type: "string",
-              description: "Relative path to image inside repository root.",
+              description:
+                "Repository-relative image path (for example './screen.png'). After calling, print <<WAITING_FOR_IMAGE>> and stop until restart.",
             },
           },
           required: ["path"],
@@ -78,10 +94,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  if (request.params.name !== "request_image") {
-    throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);
-  }
+  const toolName = request.params.name;
   const args = request.params.arguments ?? {};
+  logEvent("call_tool", { name: toolName, arguments: args });
+
+  if (toolName !== "request_image") {
+    logEvent("unknown_tool", { name: toolName });
+    throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
+  }
   const safePath = toSafeRepoRelativePath(args.path);
   fs.mkdirSync(requestsDir, { recursive: true });
   fs.appendFileSync(
@@ -89,15 +109,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     `${JSON.stringify({ ts: Date.now(), path: safePath })}\n`,
     "utf8"
   );
+  logEvent("queued_request", { path: safePath });
   return {
     content: [
       {
         type: "text",
-        text: "OK",
+        text: "Queued. Now print <<WAITING_FOR_IMAGE>> exactly and wait for wrapper restart with image attachment.",
       },
     ],
   };
 });
 
 const transport = new StdioServerTransport();
+logEvent("server_start", { repoRoot, requestsFile });
 await server.connect(transport);

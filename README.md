@@ -28,14 +28,14 @@ Codex **cannot** dynamically attach images mid-session.
 
 However, it **can**:
 
-* restore conversation state via `--continue`
+* restore conversation state via `resume --last`
 * accept images at startup via `-i`
 
 So we build a loop where:
 
 1. Codex decides it needs an image
 2. Codex requests that image via MCP
-3. A wrapper restarts Codex with `--continue -i <image>`
+3. A wrapper restarts Codex with `resume --last -i <image>`
 4. The wrapper nudges Codex to continue
 
 From Codex’s perspective, it simply:
@@ -80,7 +80,7 @@ request_image({ path: "./screens/error.png" })
 * restarts Codex using:
 
 ```bash
-codex --continue -i ./screens/error.png
+codex resume --last -i ./screens/error.png
 ```
 
 7. After startup, the wrapper **automatically sends** to stdin:
@@ -99,7 +99,7 @@ Codex CLI only accepts images **at process start**.
 
 There is currently no supported way to attach a new image to an already-running Codex session.
 
-Restarting with `--continue` is the only reliable mechanism.
+Restarting with `resume --last` is the only reliable mechanism.
 
 ---
 
@@ -120,11 +120,11 @@ RESTARTING
   ▼
 RESUMING
   │
-  ├─ codex --continue -i <image>
+  ├─ codex resume --last -i <image>
   ▼
 NUDGING
   │
-  ├─ send "continue" message
+  ├─ send "Requested image attached" message
   ▼
 RUNNING
 ```
@@ -149,7 +149,7 @@ This prevents Codex from accessing arbitrary files on the system.
 ```text
 .
 ├── wrapper/
-│   └── codex-eyes.js          # PTY wrapper (restart + continue)
+│   └── codex-eyes.js          # PTY wrapper (restart + resume)
 ├── mcp/
 │   └── image-request-mcp.js   # MCP stdio server
 └── .codex-eyes/
@@ -189,6 +189,85 @@ codex-eyes-mcp
 npm pack
 npm install -g ./codfix-0.1.0.tgz
 ```
+
+### Verify global commands are on PATH
+
+```bash
+codex-eyes --version
+codex-eyes-mcp --version
+```
+
+If `codex-eyes-mcp --version` is not implemented in your shell, run:
+
+```bash
+where codex-eyes-mcp   # Windows
+which codex-eyes-mcp   # macOS/Linux
+```
+
+---
+
+## Configure local MCP server in Codex
+
+This project uses a **local stdio MCP server**. The most reliable setup is to register it once in your user config.
+
+### Recommended (CLI-managed)
+
+```bash
+codex mcp add codex_eyes -- codex-eyes-mcp
+```
+
+Verify:
+
+```bash
+codex mcp list
+codex mcp get codex_eyes
+```
+
+### Manual `config.toml` (equivalent)
+
+Config file location:
+
+* Windows: `%USERPROFILE%\\.codex\\config.toml`
+* macOS/Linux: `~/.codex/config.toml`
+
+Add:
+
+```toml
+[mcp_servers.codex_eyes]
+transport = "stdio"
+command = "codex-eyes-mcp"
+args = []
+```
+
+If you prefer a fixed Node path + script path:
+
+```toml
+[mcp_servers.codex_eyes]
+transport = "stdio"
+command = "node"
+args = ["C:/nvm4w/nodejs/node_modules/codfix/mcp/image-request-mcp.js"]
+```
+
+Important: `args` must be a TOML array, not a single string.
+
+---
+
+## Run from anywhere
+
+1. Open any project folder in terminal.
+2. Start wrapper:
+
+```bash
+codex-eyes
+```
+
+3. In Codex, when image inspection is needed, call MCP tool:
+
+```text
+request_image({ path: "./screen.png" })
+```
+
+`codex-eyes` will restart Codex with image attachment and continue automatically.
 
 ---
 
@@ -251,8 +330,8 @@ Codex:
 
 Wrapper:
 
-* restarts Codex with `--continue -i ./screens/login_error.png`
-* sends continuation message
+* restarts Codex with `resume --last -i ./screens/login_error.png`
+* sends `Requested image attached` message
 
 Codex:
 
@@ -264,7 +343,7 @@ Codex:
 ## Limitations
 
 * Restart is unavoidable (CLI limitation)
-* `--continue` restores context, not execution — nudging is mandatory
+* `resume --last` restores context, not execution — nudging is mandatory
 * Infinite restart loops must be rate-limited
 
 ---

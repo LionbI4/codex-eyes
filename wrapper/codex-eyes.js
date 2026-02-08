@@ -9,6 +9,7 @@ const MAX_RESTARTS = 5;
 const RESTART_WINDOW_MS = 5 * 60 * 1000;
 const ALLOWED_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const NUDGE_MESSAGE = "Requested image attached";
+const DEFAULT_APPROVAL_ARGS = ["-a", "never"];
 const CODEX_COMMAND = process.platform === "win32" ? "codex.cmd" : "codex";
 
 const { spawn } = nodePty;
@@ -72,6 +73,15 @@ function resolveSafeImagePath(requestedPath) {
   return rel.startsWith(".") ? rel : `./${rel}`;
 }
 
+function withDefaultApprovals(args = []) {
+  const hasApprovalFlag = args.includes("-a") || args.includes("--ask-for-approval");
+  const bypassApprovals = args.includes("--dangerously-bypass-approvals-and-sandbox");
+  if (hasApprovalFlag || bypassApprovals) {
+    return args;
+  }
+  return [...DEFAULT_APPROVAL_ARGS, ...args];
+}
+
 function spawnCodex(args = []) {
   let proc;
   try {
@@ -122,7 +132,9 @@ function restartWithRequestedImage() {
     const requestedPath = getLastRequestedPath();
     const safeRelativePath = resolveSafeImagePath(requestedPath);
     const old = codexProcess;
-    codexProcess = spawnCodex(["--continue", "-i", safeRelativePath]);
+    codexProcess = spawnCodex(
+      withDefaultApprovals(["resume", "--last", "-i", safeRelativePath])
+    );
     if (old) {
       old.kill();
     }
@@ -192,7 +204,7 @@ process.on("exit", () => {
 
 const initialArgs = process.argv.slice(2);
 try {
-  codexProcess = spawnCodex(initialArgs);
+  codexProcess = spawnCodex(withDefaultApprovals(initialArgs));
 } catch (error) {
   process.stderr.write(`[codex-eyes] ${error.message}\n`);
   process.exit(1);
