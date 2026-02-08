@@ -1,0 +1,23 @@
+{
+  "name": "codfix",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "codex-eyes": "./wrapper/codex-eyes.js",
+    "codex-eyes-mcp": "./mcp/image-request-mcp.js"
+  },
+  "files": [
+    "wrapper",
+    "mcp",
+    "README.md"
+  ],
+  "scripts": {
+    "wrapper": "node wrapper/codex-eyes.js",
+    "mcp": "node mcp/image-request-mcp.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.1",
+    "node-pty": "^1.0.0"
+  }
+}

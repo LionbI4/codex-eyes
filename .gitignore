@@ -1,0 +1,5 @@
+node_modules/
+.codex-eyes/
+.idea/
+*.iml
+screen.png
